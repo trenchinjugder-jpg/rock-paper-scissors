@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Rock Paper Scissors — Webcam Edition</title>
+<style>
+  /* ── Reset & base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --accent: #6c63ff;
+    --accent2: #ff6584;
+    --text: #e8eaf0;
+    --muted: #7a7f9a;
+    --green: #4caf7d;
+    --red: #f06375;
+    --yellow: #f5c842;
+    --radius: 16px;
+    --radius-sm: 10px;
+    --trans: 0.25s cubic-bezier(.4,0,.2,1);
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 48px;
+    gap: 0;
+  }
+
+  h1 {
+    font-size: clamp(1.4rem, 4vw, 2rem);
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 4px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .subtitle { font-size: 0.85rem; color: var(--muted); margin-bottom: 24px; }
+
+  /* ── Layout ── */
+  .game-wrap {
+    width: 100%;
+    max-width: 900px;
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+
+  @media (max-width: 640px) {
+    .game-wrap { grid-template-columns: 1fr; }
+  }
+
+  /* ── Webcam panel ── */
+  .cam-panel {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .cam-panel h2 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+  }
+
+  #webcam-container {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  #webcam-container canvas {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover;
+    display: block;
+  }
+
+  .cam-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+    padding: 16px;
+  }
+
+  .cam-placeholder .icon { font-size: 2.5rem; }
+
+  /* Confidence bars */
+  #label-container { display: flex; flex-direction: column; gap: 6px; }
+
+  .label-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+  }
+
+  .label-name { width: 68px; color: var(--text); font-weight: 600; }
+
+  .bar-bg {
+    flex: 1;
+    height: 8px;
+    background: var(--surface2);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: var(--accent);
+    transition: width 0.2s ease;
+    width: 0%;
+  }
+
+  .label-pct { width: 34px; text-align: right; color: var(--muted); font-size: 0.73rem; }
+
+  /* Detected gesture badge */
+  .detected-badge {
+    background: var(--surface2);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85rem;
+  }
+
+  .detected-badge .emoji { font-size: 1.6rem; }
+  .detected-badge .det-label { color: var(--muted); font-size: 0.72rem; margin-bottom: 2px; }
+  .detected-badge .det-name { font-weight: 700; }
+
+  /* Confidence ring colours */
+  .bar-fill.rock    { background: #f5a623; }
+  .bar-fill.paper   { background: #4fc3f7; }
+  .bar-fill.scissors { background: #e57373; }
+
+  /* ── Game panel ── */
+  .game-panel {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 20px 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* Scoreboard */
+  .scoreboard {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface2);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+  }
+
+  .score-side { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .score-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
+  .score-num {
+    font-size: 2.8rem;
+    font-weight: 800;
+    line-height: 1;
+    transition: transform 0.2s, color 0.2s;
+  }
+
+  .score-num.pop { animation: pop 0.35s ease; }
+
+  @keyframes pop {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.45); }
+    100% { transform: scale(1); }
+  }
+
+  .score-divider { font-size: 1.3rem; color: var(--muted); font-weight: 300; }
+  .score-side.player .score-num { color: var(--accent); }
+  .score-side.computer .score-num { color: var(--accent2); }
+
+  .wins-label {
+    font-size: 0.68rem;
+    color: var(--muted);
+    text-align: center;
+    margin-top: -8px;
+  }
+
+  /* Countdown */
+  #countdown-area {
+    text-align: center;
+    min-height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .countdown-num {
+    font-size: 4rem;
+    font-weight: 900;
+    animation: countPop 0.6s ease forwards;
+  }
+
+  @keyframes countPop {
+    0%   { transform: scale(1.8); opacity: 0; }
+    40%  { transform: scale(1); opacity: 1; }
+    80%  { transform: scale(1); opacity: 1; }
+    100% { transform: scale(0.6); opacity: 0; }
+  }
+
+  .go-text {
+    font-size: 3rem;
+    font-weight: 900;
+    color: var(--green);
+    animation: goAnim 0.5s ease;
+  }
+
+  @keyframes goAnim {
+    0%   { transform: scale(0.5); opacity: 0; }
+    60%  { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  /* Instruction / result */
+  .instruction {
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--muted);
+    min-height: 28px;
+    transition: color var(--trans);
+  }
+
+  /* Action buttons */
+  .actions {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  .btn-choice {
+    background: var(--surface2);
+    border: 2px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: 18px 10px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: background var(--trans), border-color var(--trans), transform var(--trans), opacity var(--trans);
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text);
+    user-select: none;
+  }
+
+  .btn-choice:disabled { opacity: 0.38; cursor: not-allowed; }
+
+  .btn-choice:not(:disabled):hover {
+    background: #2a2f4a;
+    border-color: var(--accent);
+    transform: translateY(-3px);
+  }
+
+  .btn-choice .emoji { font-size: 2.2rem; line-height: 1; }
+
+  .btn-choice.selected {
+    border-color: var(--accent);
+    background: #2e2e55;
+  }
+
+  /* Round result */
+  #round-result {
+    text-align: center;
+    font-size: 1.05rem;
+    font-weight: 700;
+    min-height: 32px;
+    transition: color var(--trans), opacity var(--trans);
+    opacity: 0;
+  }
+
+  #round-result.show { opacity: 1; animation: fadeSlide 0.4s ease; }
+
+  @keyframes fadeSlide {
+    from { transform: translateY(-8px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+
+  #round-result.win  { color: var(--green); }
+  #round-result.lose { color: var(--red); }
+  #round-result.tie  { color: var(--yellow); }
+
+  /* Choice reveal */
+  .choice-reveal {
+    background: var(--surface2);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 72px;
+    transition: opacity 0.3s;
+    opacity: 0;
+  }
+
+  .choice-reveal.show { opacity: 1; animation: fadeSlide 0.4s ease; }
+  .choice-reveal .cr-emoji { font-size: 2rem; }
+  .choice-reveal .cr-info { display: flex; flex-direction: column; gap: 2px; }
+  .choice-reveal .cr-label { font-size: 0.7rem; color: var(--muted); }
+  .choice-reveal .cr-name  { font-weight: 700; font-size: 0.95rem; }
+
+  /* Start cam button */
+  #start-cam-btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background var(--trans), transform var(--trans);
+  }
+
+  #start-cam-btn:hover { background: #5851d8; transform: scale(1.02); }
+  #start-cam-btn:active { transform: scale(0.98); }
+  #start-cam-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Error message */
+  #cam-error {
+    font-size: 0.78rem;
+    color: var(--red);
+    text-align: center;
+    display: none;
+  }
+
+  /* ── Game Over Modal ── */
+  #game-over-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+
+  #game-over-overlay.show { display: flex; animation: fadeIn 0.3s ease; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  .modal {
+    background: var(--surface);
+    border-radius: 24px;
+    padding: 36px 32px 28px;
+    text-align: center;
+    max-width: 380px;
+    width: 90%;
+    animation: modalPop 0.4s cubic-bezier(.34,1.56,.64,1);
+  }
+
+  @keyframes modalPop {
+    from { transform: scale(0.7); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+  }
+
+  .modal-trophy { font-size: 4rem; margin-bottom: 12px; }
+  .modal-title  { font-size: 1.8rem; font-weight: 800; margin-bottom: 8px; }
+  .modal-title.player-win  { color: var(--green); }
+  .modal-title.computer-win { color: var(--red); }
+  .modal-sub { font-size: 0.9rem; color: var(--muted); margin-bottom: 28px; }
+
+  .modal-scores {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    margin-bottom: 28px;
+    font-size: 0.85rem;
+  }
+
+  .modal-scores div { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+  .modal-scores span { font-size: 2rem; font-weight: 800; }
+  .ms-p { color: var(--accent); }
+  .ms-c { color: var(--accent2); }
+
+  #play-again-btn {
+    width: 100%;
+    padding: 15px;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background var(--trans), transform var(--trans);
+  }
+
+  #play-again-btn:hover { background: #5851d8; transform: scale(1.02); }
+  #play-again-btn:active { transform: scale(0.98); }
+
+  /* Pip / win indicator dots */
+  .pips { display: flex; gap: 5px; justify-content: center; }
+  .pip {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 2px solid var(--muted);
+    transition: background var(--trans), border-color var(--trans);
+  }
+
+  .pip.filled { background: var(--accent); border-color: var(--accent); }
+  .score-side.computer .pip.filled { background: var(--accent2); border-color: var(--accent2); }
+
+  /* Confirm-use button */
+  #confirm-btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: var(--radius-sm);
+    background: var(--green);
+    color: #fff;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background var(--trans), transform var(--trans), opacity var(--trans);
+    display: none;
+  }
+
+  #confirm-btn:not(:disabled):hover { background: #3d9165; transform: scale(1.02); }
+  #confirm-btn:not(:disabled):active { transform: scale(0.98); }
+  #confirm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<h1>✊ Rock Paper Scissors</h1>
+<p class="subtitle">Show your hand to the camera — first to 3 wins!</p>
+
+<div class="game-wrap">
+
+  <!-- ══ LEFT: Webcam panel ══ -->
+  <div class="cam-panel">
+    <h2>Your camera</h2>
+
+    <div id="webcam-container">
+      <div class="cam-placeholder" id="cam-placeholder">
+        <div class="icon">📷</div>
+        <div>Camera not started</div>
+      </div>
+    </div>
+
+    <p id="cam-error"></p>
+    <button id="start-cam-btn">Start camera</button>
+
+    <!-- Detected gesture display -->
+    <div class="detected-badge" id="detected-badge" style="display:none">
+      <span class="emoji" id="det-emoji">❓</span>
+      <div>
+        <div class="det-label">Detected gesture</div>
+        <div class="det-name" id="det-name">–</div>
+      </div>
+    </div>
+
+    <!-- Confidence bars -->
+    <div id="label-container"></div>
+
+    <!-- Confirm gesture button -->
+    <button id="confirm-btn" disabled>Use this gesture ✅</button>
+  </div>
+
+  <!-- ══ RIGHT: Game panel ══ -->
+  <div class="game-panel">
+
+    <!-- Scoreboard -->
+    <div class="scoreboard">
+      <div class="score-side player">
+        <div class="score-label">You</div>
+        <div class="score-num" id="score-player">0</div>
+        <div class="pips" id="pips-player">
+          <div class="pip"></div><div class="pip"></div><div class="pip"></div>
+        </div>
+      </div>
+      <div class="score-divider">:</div>
+      <div class="score-side computer">
+        <div class="score-label">Computer</div>
+        <div class="score-num" id="score-computer">0</div>
+        <div class="pips" id="pips-computer">
+          <div class="pip"></div><div class="pip"></div><div class="pip"></div>
+        </div>
+      </div>
+    </div>
+    <p class="wins-label">First to 3 wins the match</p>
+
+    <!-- Countdown area -->
+    <div id="countdown-area">
+      <span style="color:var(--muted); font-size:0.9rem;">Start the camera to play</span>
+    </div>
+
+    <!-- Instruction text -->
+    <p class="instruction" id="instruction"></p>
+
+    <!-- Manual choice buttons (hidden by default, shown when camera not used) -->
+    <div class="actions" id="actions" style="display:none">
+      <button class="btn-choice" data-choice="rock"     disabled>
+        <span class="emoji">✊</span>Rock
+      </button>
+      <button class="btn-choice" data-choice="paper"    disabled>
+        <span class="emoji">✋</span>Paper
+      </button>
+      <button class="btn-choice" data-choice="scissors" disabled>
+        <span class="emoji">✌️</span>Scissors
+      </button>
+    </div>
+
+    <!-- Round result -->
+    <div id="round-result"></div>
+
+    <!-- Player choice reveal -->
+    <div class="choice-reveal" id="choice-reveal">
+      <span class="cr-emoji" id="cr-emoji"></span>
+      <div class="cr-info">
+        <span class="cr-label">Your choice</span>
+        <span class="cr-name" id="cr-name"></span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ Game Over Modal ══ -->
+<div id="game-over-overlay">
+  <div class="modal">
+    <div class="modal-trophy" id="modal-trophy">🏆</div>
+    <div class="modal-title" id="modal-title">You win!</div>
+    <div class="modal-sub"  id="modal-sub">Congratulations!</div>
+    <div class="modal-scores">
+      <div><span class="ms-p" id="modal-ps">0</span><small style="color:var(--muted)">You</small></div>
+      <div><span class="ms-c" id="modal-cs">0</span><small style="color:var(--muted)">CPU</small></div>
+    </div>
+    <button id="play-again-btn">▶ Play again</button>
+  </div>
+</div>
+
+<!-- Teachable Machine libraries -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+<script>
+  /* ══════════════════════════════════════════
+     CONFIGURATION
+  ══════════════════════════════════════════ */
+  const MODEL_URL = "https://teachablemachine.withgoogle.com/models/mR1lEhdJ-5/";
+
+  // Map Teachable Machine class names → internal keys (case-insensitive match)
+  // Adjust these if your model uses different label names.
+  const CLASS_MAP = {
+    rock:     ["rock"],
+    paper:    ["paper"],
+    scissors: ["scissors", "scissor"],
+  };
+
+  const EMOJIS   = { rock: "✊", paper: "✋", scissors: "✌️" };
+  const CHOICES  = ["rock", "paper", "scissors"];
+  const WINS_TO  = 3;   // first to this many wins
+
+  /* ══════════════════════════════════════════
+     STATE
+  ══════════════════════════════════════════ */
+  let model, webcam, maxPredictions;
+  let camRunning      = false;
+  let gameActive      = false;
+  let countdownActive = false;
+  let roundLocked     = false;   // true while countdown / result display is running
+
+  let playerScore   = 0;
+  let computerScore = 0;
+
+  // Currently detected gesture from webcam
+  let detectedChoice = null;  // "rock" | "paper" | "scissors" | null
+  let detectedConf   = 0;
+
+  /* ══════════════════════════════════════════
+     DOM REFS
+  ══════════════════════════════════════════ */
+  const startCamBtn    = document.getElementById("start-cam-btn");
+  const confirmBtn     = document.getElementById("confirm-btn");
+  const camError       = document.getElementById("cam-error");
+  const camPlaceholder = document.getElementById("cam-placeholder");
+  const detectedBadge  = document.getElementById("detected-badge");
+  const detEmoji       = document.getElementById("det-emoji");
+  const detName        = document.getElementById("det-name");
+  const labelContainer = document.getElementById("label-container");
+  const countdownArea  = document.getElementById("countdown-area");
+  const instruction    = document.getElementById("instruction");
+  const roundResult    = document.getElementById("round-result");
+  const choiceReveal   = document.getElementById("choice-reveal");
+  const crEmoji        = document.getElementById("cr-emoji");
+  const crName         = document.getElementById("cr-name");
+  const scorePlayer    = document.getElementById("score-player");
+  const scoreComputer  = document.getElementById("score-computer");
+  const overlay        = document.getElementById("game-over-overlay");
+  const playAgainBtn   = document.getElementById("play-again-btn");
+
+  /* ══════════════════════════════════════════
+     HELPERS
+  ══════════════════════════════════════════ */
+
+  // Normalise a TM class name to our internal key
+  function normaliseClass(rawName) {
+    const lc = rawName.toLowerCase().trim();
+    for (const [key, aliases] of Object.entries(CLASS_MAP)) {
+      if (aliases.some(a => lc.includes(a))) return key;
+    }
+    return null;  // background / unknown
+  }
+
+  // Rock‑Paper‑Scissors outcome: "win" | "lose" | "tie"
+  function getOutcome(player, computer) {
+    if (player === computer) return "tie";
+    if (
+      (player === "rock"     && computer === "scissors") ||
+      (player === "scissors" && computer === "paper")    ||
+      (player === "paper"    && computer === "rock")
+    ) return "win";
+    return "lose";
+  }
+
+  function randomChoice() {
+    return CHOICES[Math.floor(Math.random() * CHOICES.length)];
+  }
+
+  // Animate a score element
+  function popScore(el) {
+    el.classList.remove("pop");
+    void el.offsetWidth;      // reflow to re-trigger
+    el.classList.add("pop");
+  }
+
+  // Update pip indicators under scores
+  function updatePips() {
+    ["player", "computer"].forEach(side => {
+      const score = side === "player" ? playerScore : computerScore;
+      const pips  = document.getElementById(`pips-${side}`).querySelectorAll(".pip");
+      pips.forEach((pip, i) => {
+        pip.classList.toggle("filled", i < score);
+      });
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     CAMERA INIT
+  ══════════════════════════════════════════ */
+  startCamBtn.addEventListener("click", initCamera);
+
+  async function initCamera() {
+    startCamBtn.disabled = true;
+    startCamBtn.textContent = "Loading model…";
+    camError.style.display = "none";
+
+    try {
+      const modelURL    = MODEL_URL + "model.json";
+      const metaURL     = MODEL_URL + "metadata.json";
+
+      // Load Teachable Machine model
+      model          = await tmImage.load(modelURL, metaURL);
+      maxPredictions = model.getTotalClasses();
+
+      // Build confidence bar UI for each class
+      buildLabelUI();
+
+      // Setup webcam
+      webcam = new tmImage.Webcam(248, 248, true);  // width, height, flip
+      await webcam.setup();
+      await webcam.play();
+
+      // Inject canvas into container
+      camPlaceholder.style.display = "none";
+      document.getElementById("webcam-container").appendChild(webcam.canvas);
+
+      startCamBtn.style.display = "none";
+      detectedBadge.style.display = "flex";
+      confirmBtn.style.display   = "block";
+
+      camRunning  = true;
+      gameActive  = true;
+
+      // Show instruction and kick off first round
+      setCountdownArea("ready");
+      startRound();
+
+      // Begin prediction loop
+      requestAnimationFrame(predictionLoop);
+
+    } catch (err) {
+      console.error(err);
+      camError.textContent  = `⚠ Could not load camera or model: ${err.message}`;
+      camError.style.display = "block";
+      startCamBtn.disabled  = false;
+      startCamBtn.textContent = "Retry";
+    }
+  }
+
+  /* Build label bar elements once model is loaded */
+  function buildLabelUI() {
+    labelContainer.innerHTML = "";
+    for (let i = 0; i < maxPredictions; i++) {
+      const className = model.getClassLabels ? model.getClassLabels()[i] : `Class ${i}`;
+      const key       = normaliseClass(className) || "unknown";
+
+      const row = document.createElement("div");
+      row.className = "label-row";
+      row.innerHTML = `
+        <span class="label-name">${className}</span>
+        <div class="bar-bg"><div class="bar-fill ${key}" id="bar-${i}"></div></div>
+        <span class="label-pct" id="pct-${i}">0%</span>`;
+      labelContainer.appendChild(row);
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     PREDICTION LOOP
+  ══════════════════════════════════════════ */
+  async function predictionLoop() {
+    if (!camRunning) return;
+    webcam.update();
+
+    if (model) {
+      const predictions = await model.predict(webcam.canvas);
+      let bestConf = 0, bestKey = null;
+
+      predictions.forEach((p, i) => {
+        const conf  = p.probability;
+        const key   = normaliseClass(p.className);
+        const pct   = Math.round(conf * 100);
+
+        // Update bar
+        const bar = document.getElementById(`bar-${i}`);
+        const lbl = document.getElementById(`pct-${i}`);
+        if (bar) bar.style.width = pct + "%";
+        if (lbl) lbl.textContent = pct + "%";
+
+        if (conf > bestConf) { bestConf = conf; bestKey = key; }
+      });
+
+      detectedConf   = bestConf;
+      detectedChoice = bestKey;  // may be null if background wins
+
+      // Update detected badge
+      if (bestKey && bestConf > 0.6) {
+        detEmoji.textContent = EMOJIS[bestKey] || "❓";
+        detName.textContent  = bestKey.charAt(0).toUpperCase() + bestKey.slice(1);
+      } else {
+        detEmoji.textContent = "❓";
+        detName.textContent  = "Show a gesture…";
+        detectedChoice       = null;
+      }
+
+      // Enable / disable confirm button based on whether there's a strong enough reading
+      // and the round is active (not locked)
+      if (!roundLocked && gameActive && detectedChoice) {
+        confirmBtn.disabled = false;
+      } else {
+        confirmBtn.disabled = true;
+      }
+    }
+
+    requestAnimationFrame(predictionLoop);
+  }
+
+  /* ══════════════════════════════════════════
+     GAME FLOW
+  ══════════════════════════════════════════ */
+
+  // Confirm gesture button click — use the currently detected gesture
+  confirmBtn.addEventListener("click", () => {
+    if (roundLocked || !detectedChoice || !gameActive) return;
+    playRound(detectedChoice);
+  });
+
+  function setCountdownArea(html) {
+    countdownArea.innerHTML = html;
+  }
+
+  /* Countdown: 3 → 2 → 1 → GO! then call cb */
+  function countdown(cb) {
+    countdownActive = true;
+    roundLocked     = true;
+    confirmBtn.disabled = true;
+
+    const steps   = [3, 2, 1, "GO!"];
+    const colors  = ["#6c63ff", "#f5c842", "#f06375", "#4caf7d"];
+    let   i       = 0;
+
+    function step() {
+      if (i >= steps.length) {
+        countdownActive = false;
+        setCountdownArea("");
+        cb();
+        return;
+      }
+      const val = steps[i];
+      const col = colors[i];
+      setCountdownArea(
+        `<span class="countdown-num" style="color:${col}">${val}</span>`
+      );
+      i++;
+      // Force reflow to re-run CSS animation
+      const el = countdownArea.firstElementChild;
+      void el.offsetWidth;
+      el.style.animation = "none";
+      void el.offsetWidth;
+      el.style.animation = "";
+
+      setTimeout(step, val === "GO!" ? 600 : 900);
+    }
+    step();
+  }
+
+  /* Start a new round (runs countdown, then waits for player input) */
+  function startRound() {
+    // Clear previous round UI
+    roundResult.className   = "round-result";
+    roundResult.textContent = "";
+    roundResult.classList.remove("show");
+    choiceReveal.classList.remove("show");
+    instruction.textContent = "";
+
+    countdown(() => {
+      // Countdown finished — player can now submit gesture
+      roundLocked = false;
+      instruction.textContent = "Hold your gesture steady, then press 'Use this gesture'";
+      confirmBtn.disabled = !detectedChoice;
+    });
+  }
+
+  /* Resolve a round with the player's choice */
+  function playRound(playerChoice) {
+    roundLocked = true;
+    confirmBtn.disabled = true;
+    instruction.textContent = "";
+
+    const computerChoice = randomChoice();   // computer picks secretly
+    const outcome        = getOutcome(playerChoice, computerChoice);
+
+    // Show player choice
+    crEmoji.textContent = EMOJIS[playerChoice];
+    crName.textContent  = playerChoice.charAt(0).toUpperCase() + playerChoice.slice(1);
+    choiceReveal.classList.add("show");
+
+    // Display result text
+    const resultTexts = {
+      win:  "✅ You win this round!",
+      lose: "❌ Computer wins this round!",
+      tie:  "🤝 It's a tie!"
+    };
+
+    roundResult.textContent = resultTexts[outcome];
+    roundResult.className   = "";
+    void roundResult.offsetWidth;
+    roundResult.classList.add("show", outcome);
+
+    // Update scores
+    if (outcome === "win")  { playerScore++;   popScore(scorePlayer);   }
+    if (outcome === "lose") { computerScore++; popScore(scoreComputer); }
+
+    scorePlayer.textContent   = playerScore;
+    scoreComputer.textContent = computerScore;
+    updatePips();
+
+    // Check for match winner
+    if (playerScore >= WINS_TO || computerScore >= WINS_TO) {
+      setTimeout(showGameOver, 1400);
+    } else {
+      // Wait a moment then start next round
+      setTimeout(startRound, 2400);
+    }
+  }
+
+  /* Show game over modal */
+  function showGameOver() {
+    const playerWon = playerScore >= WINS_TO;
+
+    document.getElementById("modal-trophy").textContent  = playerWon ? "🏆" : "💻";
+    document.getElementById("modal-title").textContent   = playerWon ? "You win the match!" : "Computer wins!";
+    document.getElementById("modal-title").className     = `modal-title ${playerWon ? "player-win" : "computer-win"}`;
+    document.getElementById("modal-sub").textContent     = playerWon
+      ? "Great job — you dominated!"
+      : "Better luck next time!";
+    document.getElementById("modal-ps").textContent = playerScore;
+    document.getElementById("modal-cs").textContent = computerScore;
+
+    overlay.classList.add("show");
+    gameActive = false;
+    confirmBtn.disabled = true;
+  }
+
+  /* Play Again */
+  playAgainBtn.addEventListener("click", resetGame);
+
+  function resetGame() {
+    playerScore   = 0;
+    computerScore = 0;
+    scorePlayer.textContent   = "0";
+    scoreComputer.textContent = "0";
+    updatePips();
+
+    roundResult.textContent = "";
+    roundResult.classList.remove("show", "win", "lose", "tie");
+    choiceReveal.classList.remove("show");
+    instruction.textContent = "";
+
+    overlay.classList.remove("show");
+    gameActive  = true;
+    roundLocked = false;
+    startRound();
+  }
+</script>
+</body>
+</html>
